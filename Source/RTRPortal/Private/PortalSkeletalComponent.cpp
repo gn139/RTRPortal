@@ -18,4 +18,3 @@ AActor* UPortalSkeletalComponent::Clone()
 
 	return actor;
 }
-
