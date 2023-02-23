@@ -9,5 +9,7 @@
 
     no custom matrix video
 
-<iframe width="100%" height="400" src="README/WithoutCustomMatrix.mp4" frameborder="0" allowfullscreen></iframe>
+    <video width="1280" height="720" controls>
+    <source src="README/WithoutCustomMatrix.mp4" type="video/mp4">
+    </video>
 
