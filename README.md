@@ -10,5 +10,5 @@
     no custom matrix video
 
     <video width="1280" height="720" controls>
-    <source src="https://github.com/gn139/RTRPortal/blob/main/README/WithoutCustomMatrix.mp4" type="video/mp4">
+    <source src="WithoutCustomMatrix.mp4" type="video/mp4">
     </video>
