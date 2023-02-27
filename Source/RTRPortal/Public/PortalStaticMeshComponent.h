@@ -17,7 +17,7 @@ struct FVertex
 
 public:
 
-	FVector WorldPosition;
+	FVector GamePosition;
 	FIntPoint Index;
 	FVector2D PixelPosition;
 	bool IsInView;
@@ -27,7 +27,7 @@ public:
 	/* Default Constructor. */
 	FVertex()
 	{
-		WorldPosition = FVector::ZeroVector;
+		GamePosition = FVector::ZeroVector;
 		Index = FIntPoint::NoneValue;
 		PixelPosition = FVector2D::ZeroVector;
 		IsInView = false;
@@ -36,7 +36,7 @@ public:
 	/* Main Constructor. */
 	FVertex(FVector worldPosition)
 	{
-		WorldPosition = worldPosition;
+		GamePosition = worldPosition;
 		Index = FIntPoint::NoneValue;
 		PixelPosition = FVector2D::ZeroVector;
 		IsInView = false;
@@ -75,7 +75,7 @@ public:
 
 	//Get a rect for Protal Camera
 	bool CalculatePortalMeshRect(ULocalPlayer* localPlayer, 
-		const FMinimalViewInfo viewInfo, FIntRect& outRect, bool debugPoint = false);
+		const FMinimalViewInfo& viewInfo, FIntRect& outRect, bool debugPoint = false);
 	
 private:
 

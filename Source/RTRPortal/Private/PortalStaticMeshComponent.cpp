@@ -13,6 +13,9 @@ DEFINE_LOG_CATEGORY(LogPortalMesh);
 
 UPortalStaticMeshComponent::UPortalStaticMeshComponent() 
 {
+#if WITH_EDITORONLY_DATA
+	bEnableAutoLODGeneration = false;
+#endif
 	SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	SetCollisionObjectType(ECC_Portal);
 	SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Overlap);
@@ -21,8 +24,10 @@ UPortalStaticMeshComponent::UPortalStaticMeshComponent()
 	//Use Default Plane ( Four Vertices )
 	auto MeshAsset = ConstructorHelpers::FObjectFinder<UStaticMesh>(
 		TEXT("StaticMesh'/Engine/BasicShapes/Plane.Plane'"));
-	if (MeshAsset.Object)
-		SetStaticMesh(MeshAsset.Object);
+	if (!MeshAsset.Object)
+		return;
+	SetStaticMesh(MeshAsset.Object);
+	GetStaticMesh()->bAllowCPUAccess = true; //for CacheStaticMeshVertics in Package
 }
 
 TMap<FIntPoint, FVertex>* UPortalStaticMeshComponent::GetMeshVertices() const
@@ -39,7 +44,7 @@ FPlane UPortalStaticMeshComponent::GetPortaMeshPlane()
 }
 
 bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlayer, 
-	const FMinimalViewInfo viewInfo, FIntRect& outRect, bool debugPoint)
+	const FMinimalViewInfo& viewInfo, FIntRect& outRect, bool debugPoint)
 {
 	CHECK_DESTROY_COMP(LogPortalMesh, !localPlayer,
 		"CalculatePortalMeshRect: local player class couldn't be found in the portalMesh %s.", *GetName());
@@ -58,18 +63,25 @@ bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlay
 	if (!URTRPortalBPLibrary::IsComponentInCameraViewFrustum(this, viewInfo))
 		return false;
 
+	//FSceneViewProjectionData projectionData;
+	//projectionData.SetViewRectangle(viewInfo.);
+
 	int count = 0;
 	for (auto& meshVertexKV : meshVertices) 
 	{
 		FVertex meshVertex = meshVertexKV.Value;
 		FVector2D pixelPoint;
-		bool flag = localPlayer->GetPixelPoint(meshVertex.WorldPosition, pixelPoint);
+		bool flag = localPlayer->GetPixelPoint(meshVertex.GamePosition, pixelPoint);
 
 		meshVertex.IsInView = 
-			URTRPortalBPLibrary::IsPointInCameraViewFrustum(meshVertex.WorldPosition, viewInfo) && flag;
+			URTRPortalBPLibrary::IsPointInCameraViewFrustum(meshVertex.GamePosition, viewInfo) && flag;
 
 		pixelPoint.X = FMath::Clamp(pixelPoint.X, 0.0f, ViewportSize.X);
 		pixelPoint.Y = FMath::Clamp(pixelPoint.Y, 0.0f, ViewportSize.Y);
+
+
+		if (debugPoint)
+			UE_LOG(LogPortalMesh, Warning, TEXT("%s"), *pixelPoint.ToString());
 
 		meshVertex.PixelPosition = pixelPoint;
 
@@ -87,11 +99,19 @@ bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlay
 
 		count++;
 
-		//if (debugPoint && meshVertex.Index.X > meshVertex.Index.Y) 
-		//	DrawDebugPoint(GetWorld(), meshVertex.WorldPosition, 10, FColor::Red);
+		if (debugPoint && meshVertex.Index.X > meshVertex.Index.Y) 
+			DrawDebugPoint(GetWorld(), meshVertex.GamePosition, 10, FColor::Red);
 
-		//if (debugPoint && meshVertex.Index.X < meshVertex.Index.Y)
-		//	DrawDebugPoint(GetWorld(), meshVertex.WorldPosition, 10, FColor::Red);
+		if (debugPoint && meshVertex.Index.X > meshVertex.Index.Y)
+			if (auto debugHUD = Cast<ARTRPortalDebugHUD>(GetWorld()->GetFirstPlayerController()->GetHUD()))
+				debugHUD->DebugRects.Add(FIntRect(FIntPoint(pixelPoint.X, pixelPoint.Y), FIntPoint(pixelPoint.X + 20, pixelPoint.Y + 20)));
+
+		if (debugPoint && meshVertex.Index.X < meshVertex.Index.Y)
+			DrawDebugPoint(GetWorld(), meshVertex.GamePosition, 10, FColor::Red);
+
+		if (debugPoint && meshVertex.Index.X < meshVertex.Index.Y)
+			if (auto debugHUD = Cast<ARTRPortalDebugHUD>(GetWorld()->GetFirstPlayerController()->GetHUD()))
+				debugHUD->DebugRects.Add(FIntRect(FIntPoint(pixelPoint.X, pixelPoint.Y), FIntPoint(pixelPoint.X + 20, pixelPoint.Y + 20)));
 	}
 
 	if (debugPoint)
@@ -120,6 +140,8 @@ void UPortalStaticMeshComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 
 void UPortalStaticMeshComponent::CacheStaticMeshVertics() const
 {
+	//UE_LOG(LogPortalMesh, Warning, TEXT("Begin CacheStaticMeshVertics"));
+
 	meshVertices.Empty(4);
 
 	meshMidPoint = FVector::ZeroVector;
@@ -141,7 +163,7 @@ void UPortalStaticMeshComponent::CacheStaticMeshVertics() const
 		const FVector& localPosition = LOD_model.VertexBuffers.PositionVertexBuffer.
 			VertexPosition(vertexIndex);
 		const FVector worldPosition = GetComponentTransform().TransformPosition(localPosition);
-
+		//UE_LOG(LogPortalMesh, Warning, TEXT("%s"), *worldPosition.ToString());
 		auto vertex = FVertex(worldPosition);
 		vertex.Index = FIntPoint(FMath::Sign(localPosition.X), FMath::Sign(localPosition.Y));
 
@@ -151,4 +173,7 @@ void UPortalStaticMeshComponent::CacheStaticMeshVertics() const
 	}
 
 	meshMidPoint /= numVertices;
+
+	//UE_LOG(LogPortalMesh, Warning, TEXT("End CacheStaticMeshVertics"));
+
 }

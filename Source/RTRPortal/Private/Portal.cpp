@@ -50,6 +50,7 @@ void APortal::Setup()
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	CHECK_DESTROY_VOID(LogPortal, !PC, "Player controller could not be found in the portal class %s.", *GetName());
 	portalController = PC;
+
 	ACharacter* character = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 	CHECK_DESTROY_VOID(LogPortal, !character, "Player portal character could not be found in the portal class %s.", *GetName());
 	ULocalPlayer* LP = portalController->GetLocalPlayer();
@@ -115,7 +116,7 @@ void APortal::Tick(float DeltaTime)
 	URTRPortalSubsystem* portalSubsystem = portalPlayer->GetSubsystem<URTRPortalSubsystem>();
 	portalSubsystem->ReleaseRenderTarget(this);
 
-	FMinimalViewInfo playerViewInfo (portalController->PlayerCameraManager->GetCameraCachePOV());
+	FMinimalViewInfo playerViewInfo (portalController->PlayerCameraManager->ViewTarget.POV);
 	if (!URTRPortalBPLibrary::IsInfront(playerViewInfo.Location, this, debugIsInfront))
 		return;
 
@@ -125,6 +126,7 @@ void APortal::Tick(float DeltaTime)
 	portalMesh->cPortalMaterial->SetScalarParameterValue("ScaleOffset", 0.0f);
 
 	FIntRect meshViewRect;
+	playerViewInfo.bConstrainAspectRatio = false;//GetPixelPoint CAMERA: This has issues with aspect-ratio constrained cameras
 	if (!portalMesh->CalculatePortalMeshRect(portalPlayer, playerViewInfo, meshViewRect, debugPortalMeshRect))
 		return;
 
