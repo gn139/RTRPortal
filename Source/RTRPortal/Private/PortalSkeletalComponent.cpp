@@ -13,8 +13,12 @@ AActor* UPortalSkeletalComponent::Clone()
 	auto skeletal = NewObject<USkeletalMeshComponent>(actor);
 	skeletal->RegisterComponent();
 	skeletal->SetRelativeTransform(parent->GetRelativeTransform());
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+	skeletal->SetSkeletalMeshAsset(parent->GetSkeletalMeshAsset());
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
 	skeletal->SkeletalMesh = parent->SkeletalMesh;
-	skeletal->SetMasterPoseComponent(parent);
+#endif
+	skeletal->SetLeaderPoseComponent(parent);
 
 	return actor;
 }

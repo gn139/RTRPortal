@@ -67,9 +67,10 @@ bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlay
 	//projectionData.SetViewRectangle(viewInfo.);
 
 	int count = 0;
+	float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
 	for (auto& meshVertexKV : meshVertices) 
 	{
-		FVertex meshVertex = meshVertexKV.Value;
+		FVertex& meshVertex = meshVertexKV.Value;
 		FVector2D pixelPoint;
 		bool flag = localPlayer->GetPixelPoint(meshVertex.GamePosition, pixelPoint);
 
@@ -86,16 +87,17 @@ bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlay
 		meshVertex.PixelPosition = pixelPoint;
 
 		if (count == 0)
-			outRect.Min = FIntPoint(pixelPoint.X, pixelPoint.Y);
-
-		if (count == 0)
-			outRect.Max = FIntPoint(pixelPoint.X, pixelPoint.Y);
-
-		outRect.Min.X = meshVertex.PixelPosition.X < outRect.Min.X ? meshVertex.PixelPosition.X : outRect.Min.X;
-		outRect.Min.Y = meshVertex.PixelPosition.Y < outRect.Min.Y ? meshVertex.PixelPosition.Y : outRect.Min.Y;
-
-		outRect.Max.X = meshVertex.PixelPosition.X > outRect.Max.X ? meshVertex.PixelPosition.X : outRect.Max.X;
-		outRect.Max.Y = meshVertex.PixelPosition.Y > outRect.Max.Y ? meshVertex.PixelPosition.Y : outRect.Max.Y;
+		{
+			minX = maxX = pixelPoint.X;
+			minY = maxY = pixelPoint.Y;
+		}
+		else
+		{
+			minX = FMath::Min(minX, pixelPoint.X);
+			minY = FMath::Min(minY, pixelPoint.Y);
+			maxX = FMath::Max(maxX, pixelPoint.X);
+			maxY = FMath::Max(maxY, pixelPoint.Y);
+		}
 
 		count++;
 
@@ -113,6 +115,9 @@ bool UPortalStaticMeshComponent::CalculatePortalMeshRect(ULocalPlayer* localPlay
 			if (auto debugHUD = Cast<ARTRPortalDebugHUD>(GetWorld()->GetFirstPlayerController()->GetHUD()))
 				debugHUD->DebugRects.Add(FIntRect(FIntPoint(pixelPoint.X, pixelPoint.Y), FIntPoint(pixelPoint.X + 20, pixelPoint.Y + 20)));
 	}
+
+	outRect.Min = FIntPoint(FMath::FloorToInt(minX), FMath::FloorToInt(minY));
+	outRect.Max = FIntPoint(FMath::CeilToInt(maxX), FMath::CeilToInt(maxY));
 
 	if (debugPoint)
 		if(auto debugHUD = Cast<ARTRPortalDebugHUD>(GetWorld()->GetFirstPlayerController()->GetHUD()))
@@ -160,9 +165,32 @@ void UPortalStaticMeshComponent::CacheStaticMeshVertics() const
 
 	for (uint32 vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex)
 	{
-		const FVector& localPosition = LOD_model.VertexBuffers.PositionVertexBuffer.
-			VertexPosition(vertexIndex);
-		const FVector worldPosition = GetComponentTransform().TransformPosition(localPosition);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+
+		const FVector3f& localPosition =
+			LOD_model
+			.VertexBuffers
+			.PositionVertexBuffer
+			.VertexPosition(vertexIndex);
+
+		const FVector3d worldPosition =
+			GetComponentTransform()
+			.TransformPosition(FVector3d(localPosition));
+
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
+
+		const FVector& localPosition = 
+			LOD_model
+			.VertexBuffers
+			.PositionVertexBuffer
+			.VertexPosition(vertexIndex);
+
+		const FVector worldPosition = 
+			GetComponentTransform().TransformPosition(localPosition);
+
+#endif
+
+
 		//UE_LOG(LogPortalMesh, Warning, TEXT("%s"), *worldPosition.ToString());
 		auto vertex = FVertex(worldPosition);
 		vertex.Index = FIntPoint(FMath::Sign(localPosition.X), FMath::Sign(localPosition.Y));

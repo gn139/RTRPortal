@@ -6,6 +6,7 @@
 #include "PortalStaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 
 UPortalSceneCaptureComponent2D::UPortalSceneCaptureComponent2D()
@@ -75,10 +76,10 @@ void UPortalSceneCaptureComponent2D::UpdateRenderTarget(int viewportX, int viewp
 //
 //}
 
-FMinimalViewInfo UPortalSceneCaptureComponent2D::UpdateSceneCapture(ULocalPlayer* localPlayer, 
+FMinimalViewInfo UPortalSceneCaptureComponent2D::UpdateSceneCapture(ULocalPlayer* localPlayer,
 	const FMinimalViewInfo& viewInfo, APortal* portal, const FIntRect& portalMeshRect, bool debugCameraTransform)
 {
-	FMinimalViewInfo sceneCpatureInfo (viewInfo);
+	FMinimalViewInfo sceneCpatureInfo(viewInfo);
 	if (!portal || !portal->pTargetPortal)
 		return sceneCpatureInfo;
 
@@ -117,31 +118,83 @@ FMinimalViewInfo UPortalSceneCaptureComponent2D::UpdateSceneCapture(ULocalPlayer
 		viewportY = ViewportSize.Y;
 	}
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+
+	int32 rectHeight = portalMeshRect.Max.Y - portalMeshRect.Min.Y;
+	int32 rectWidth = portalMeshRect.Max.X - portalMeshRect.Min.X;
+
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
+
 	float rectHeight = portalMeshRect.Max.Y - portalMeshRect.Min.Y;
 	float rectWidth = portalMeshRect.Max.X - portalMeshRect.Min.X;
 
+#endif
+
 	GetCameraView(0, sceneCpatureInfo);
 
-	if (!bCaculateCustomProjectMatrix) 
+	if (!bCaculateCustomProjectMatrix)
 	{
 		CustomProjectionMatrix = viewInfo.CalculateProjectionMatrix();
 		TextureTarget = renderTarget;
 		return sceneCpatureInfo;
 	}
-	if (rectWidth <= 0 || rectHeight <= 0 || 
-		(rectWidth > FMath::TruncToFloat(viewportX) && rectHeight > FMath::TruncToFloat(viewportY)))
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+
+	if (rectWidth <= 0 || rectHeight <= 0
+		|| (rectWidth > viewportX
+			&& rectHeight > viewportY))
 		return sceneCpatureInfo;
+
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
+
+	if (rectWidth <= 0 || rectHeight <= 0 ||
+		(rectWidth > FMath::TruncToFloat(viewportX)
+			&& rectHeight > FMath::TruncToFloat(viewportY)))
+		return sceneCpatureInfo;
+
+#endif
+
 
 	FVector2D portalMeshMid (portalMeshRect.Min.X + rectWidth / 2, portalMeshRect.Min.Y + rectHeight / 2);
 
 	//FOVAngle
 	float defaultFOV = viewInfo.FOV;
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+	//float desiredFOV =
+	//	FMath::RadiansToDegrees
+	//	(
+	//		FMath::Atan
+	//		(
+	//			FMath::Tan
+	//			(
+	//				FMath::DegreesToRadians
+	//				(
+	//					defaultFOV / 2
+	//				)
+	//			) * rectWidth / viewportX) * 2
+ //     	);
+	// 左/右/上/下边缘在屏幕上的实际角度
+	float FOVradHalf = FMath::DegreesToRadians(defaultFOV / 2);
+	float leftAngle = FMath::Atan(FMath::Tan(FOVradHalf) * (2.0f * portalMeshRect.Min.X / viewportX - 1.0f));
+	float rightAngle = FMath::Atan(FMath::Tan(FOVradHalf) * (2.0f * portalMeshRect.Max.X / viewportX - 1.0f));
+	float desiredFOV_rad = rightAngle - leftAngle; // 真实角宽度
+	float desiredFOV = FMath::RadiansToDegrees(desiredFOV_rad);
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
+
 	float desiredFOV = FMath::RadiansToDegrees(
-		FMath::Atan(FMath::Tan(FMath::DegreesToRadians(defaultFOV / 2)) *
+		FMath::Atan(
+			FMath::Tan(FMath::DegreesToRadians(defaultFOV / 2)) *
 			rectWidth / FMath::TruncToFloat(viewportX)) * 2);
+#endif
+
 	desiredFOV = desiredFOV < defaultFOV ? desiredFOV : defaultFOV;
+
 	FOVAngle = desiredFOV;
-	LODDistanceFactor = desiredFOV / FMath::Max<float>(0.01f, viewInfo.FOV);
+
+	LODDistanceFactor = 
+		desiredFOV / FMath::Max<float>(0.01f, viewInfo.FOV);
 
 	//Because of AspectRatio, update RenderTarget before GetCameraView
 	UpdateRenderTarget(viewportX, viewportY, rectWidth, rectHeight);
@@ -149,10 +202,24 @@ FMinimalViewInfo UPortalSceneCaptureComponent2D::UpdateSceneCapture(ULocalPlayer
 	GetCameraView(0, sceneCpatureInfo);
 
 	//OffCenterProjectionOffset
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 7
+	FVector2D origin = 
+		FVector2D
+		(
+			viewportX / 2,
+			viewportY / 2
+		);
+
+#elif ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION == 24
+
 	FVector2D origin = FVector2D(FMath::TruncToFloat(viewportX) / 2,
 		FMath::TruncToFloat(viewportY) / 2);
+#endif
+	// 角中心（用于 OffCenterProjectionOffset）
+	float centerAngleX = (leftAngle + rightAngle) * 0.5f;
+	float centerOffsetX = FMath::Tan(centerAngleX) / FMath::Tan(desiredFOV_rad * 0.5f);
 	FVector2D Offset = portalMeshMid - origin;
-	FVector2D centerOffset(2 * Offset.X / rectWidth, -2 * Offset.Y / rectHeight);
+	FVector2D centerOffset(centerOffsetX, -2 * Offset.Y / rectHeight);
 	sceneCpatureInfo.OffCenterProjectionOffset = centerOffset;
 
 	//CustomProjectionMatrix
